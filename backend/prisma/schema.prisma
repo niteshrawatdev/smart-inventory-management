@@ -1,0 +1,139 @@
+// prisma/schema.prisma - COPY AND PASTE THIS ENTIRE FILE
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String         @id @default(uuid())
+  email        String         @unique
+  passwordHash String         @map("password_hash")
+  fullName     String?        @map("full_name")
+  role         String         @default("VIEWER")
+  avatarUrl    String?        @map("avatar_url")
+  isActive     Boolean        @default(true) @map("is_active")
+  lastLogin    DateTime?      @map("last_login")
+  createdAt    DateTime       @default(now()) @map("created_at")
+  updatedAt    DateTime       @updatedAt @map("updated_at")
+  
+  // Relations
+  managedWarehouses Warehouse[]     @relation("WarehouseManager")
+  stockMovements    StockMovement[] @relation("StockMovementUser")
+  resolvedAlerts    Alert[]         @relation("AlertResolver")
+  
+  @@map("users")
+}
+
+model Warehouse {
+  id                  String        @id @default(uuid())
+  name                String
+  location            String?
+  capacity            Int?
+  currentUtilization  Int           @default(0) @map("current_utilization")
+  managerId           String?       @map("manager_id")
+  isActive            Boolean       @default(true) @map("is_active")
+  createdAt           DateTime      @default(now()) @map("created_at")
+  
+  // Relations
+  manager        User?          @relation("WarehouseManager", fields: [managerId], references: [id])
+  inventoryItems Inventory[]    @relation("WarehouseInventory")
+  stockMovements StockMovement[] @relation("WarehouseStockMovements")
+  alerts         Alert[]        @relation("WarehouseAlerts")
+  aiDetections   AiDetection[]  @relation("WarehouseAiDetections")
+  
+  @@map("warehouses")
+}
+
+model Product {
+  id           String      @id @default(uuid())
+  sku          String      @unique
+  name         String
+  category     String?
+  description  String?
+  unitPrice    Float       @map("unit_price")
+  imageUrl     String?     @map("image_url")
+  reorderPoint Int         @default(10) @map("reorder_point")
+  optimalStock Int         @default(50) @map("optimal_stock")
+  createdAt    DateTime    @default(now()) @map("created_at")
+  
+  // Relations
+  inventoryItems Inventory[] @relation("ProductInventory")
+  
+  @@map("products")
+}
+
+model Inventory {
+  id                   String          @id @default(uuid())
+  warehouseId          String          @map("warehouse_id")
+  productId            String          @map("product_id")
+  quantity             Int             @default(0)
+  lastUpdated          DateTime        @default(now()) @map("last_updated")
+  locationInWarehouse  String?         @map("location_in_warehouse")
+  
+  // Relations
+  warehouse Warehouse      @relation("WarehouseInventory", fields: [warehouseId], references: [id], onDelete: Cascade)
+  product   Product        @relation("ProductInventory", fields: [productId], references: [id], onDelete: Cascade)
+  movements StockMovement[] @relation("InventoryStockMovements")
+  alerts    Alert[]        @relation("InventoryAlerts")
+  
+  @@unique([warehouseId, productId])
+  @@map("inventory")
+}
+
+model StockMovement {
+  id               String    @id @default(uuid())
+  inventoryId      String    @map("inventory_id")
+  movementType     String    @map("movement_type")
+  quantityChange   Int       @map("quantity_change")
+  previousQuantity Int       @map("previous_quantity")
+  newQuantity      Int       @map("new_quantity")
+  reason           String?
+  userId           String?   @map("user_id")
+  warehouseId      String?   @map("warehouse_id")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  
+  // Relations
+  inventory Inventory @relation("InventoryStockMovements", fields: [inventoryId], references: [id], onDelete: Cascade)
+  user      User?     @relation("StockMovementUser", fields: [userId], references: [id])
+  warehouse Warehouse? @relation("WarehouseStockMovements", fields: [warehouseId], references: [id], onDelete: Cascade)
+  
+  @@map("stock_movements")
+}
+
+model Alert {
+  id          String    @id @default(uuid())
+  type        String
+  severity    String
+  message     String
+  inventoryId String?   @map("inventory_id")
+  warehouseId String?   @map("warehouse_id")
+  isResolved  Boolean   @default(false) @map("is_resolved")
+  resolvedAt  DateTime? @map("resolved_at")
+  resolvedBy  String?   @map("resolved_by")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  
+  // Relations
+  inventory Inventory? @relation("InventoryAlerts", fields: [inventoryId], references: [id], onDelete: Cascade)
+  resolver   User?     @relation("AlertResolver", fields: [resolvedBy], references: [id])
+  warehouse  Warehouse? @relation("WarehouseAlerts", fields: [warehouseId], references: [id], onDelete: Cascade)
+  
+  @@map("alerts")
+}
+
+model AiDetection {
+  id             String    @id @default(uuid())
+  warehouseId    String    @map("warehouse_id")
+  imageUrl       String    @map("image_url")
+  detectionData  Json      @map("detection_data")
+  processedAt    DateTime  @default(now()) @map("processed_at")
+  accuracyScore  Float?    @map("accuracy_score")
+  
+  // Relations
+  warehouse Warehouse @relation("WarehouseAiDetections", fields: [warehouseId], references: [id])
+  
+  @@map("ai_detections")
+}
